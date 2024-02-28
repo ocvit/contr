@@ -22,9 +22,13 @@ SimpleCov.formatters = SimpleCov::Formatter::MultiFormatter.new([
 
 require "contr"
 
+# require all spec `support` files
+Dir["#{File.dirname(__FILE__)}/support/**/*.rb"].sort.each { |f| require f }
+
 RSpec.configure do |config|
   config.mock_with :rspec do |mocks|
     mocks.verify_partial_doubles = true
+    mocks.allow_message_expectations_on_nil = true
   end
 
   # enable flags like --only-failures and --next-failure
