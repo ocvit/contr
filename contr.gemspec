@@ -8,8 +8,8 @@ Gem::Specification.new do |spec|
   spec.authors = ["Dmytro Horoshko"]
   spec.email = ["electric.molfar@gmail.com"]
 
-  spec.summary = "..."
-  spec.description = "..."
+  spec.summary = "Minimalistic contracts in plain Ruby"
+  spec.description = "Minimalistic contracts in plain Ruby."
   spec.homepage = "https://github.com/ocvit/contr"
   spec.license = "MIT"
   spec.metadata = {
