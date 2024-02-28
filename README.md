@@ -1,5 +1,9 @@
 # Contr
 
+[![Gem Version](https://badge.fury.io/rb/contr.svg)](https://badge.fury.io/rb/contr)
+[![Test](https://github.com/ocvit/contr/workflows/Test/badge.svg)](https://github.com/ocvit/contr/actions)
+[![Coverage Status](https://coveralls.io/repos/github/ocvit/contr/badge.svg?branch=main)](https://coveralls.io/github/ocvit/contr?branch=main)
+
 Minimalistic contracts in plain Ruby.
 
 ## Installation
