@@ -121,22 +121,22 @@ contract.check_async(*args) { raise StandardError, "some error" }
 
 Each contract instance can work with 2 dedicated thread pools:
 
-- `main` - to control a contract flow itself (always enabled)
-- `rules` - to execute rules asynchronously (disabled by default)
+- `main` - to execute contract checks asynchronously (always present)
+- `rules` - to execute rules asynchronously (not set by default)
 
 There are couple of predefined pool primitives that can be used:
 
 ```ruby
 # fixed
-# - works as fixed pool of size: 0..max_threads
+# - works as a fixed pool of size: 0..max_threads
 # - max_threads == vCPU cores, but can be overridden
-# - similar to `fast` provided by `concurrent-ruby`
+# - similar to `fast` provided by `concurrent-ruby`, but is not global
 Contr::Async::Pool::Fixed.new
 Contr::Async::Pool::Fixed.new(max_threads: 9000)
 
 # io (global)
 # - provided by `concurrent-ruby`
-# - works as dynamic pool of almost unlimited size (danger!)
+# - works as a dynamic pool of almost unlimited size (danger!)
 # - quote: "recommended for long tasks with blocking I/O operations"
 Contr::Async::Pool::GlobalIO.new
 ```
@@ -490,6 +490,10 @@ posts.each do |post|
   Contracts::PostRemovalNoLogger.check_async(*args) { delete_post(post) }
 end
 ```
+
+## Examples
+
+Examples can be found [here](https://github.com/ocvit/contr/tree/main/examples).
 
 ## Benchmarks
 
