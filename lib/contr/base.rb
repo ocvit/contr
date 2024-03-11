@@ -97,7 +97,7 @@ module Contr
         in logger: Logger::Base => custom_logger
           custom_logger
         in logger: invalid_logger
-          raise ArgumentError, "logger should be inherited from Contr::Logger::Base or be falsey, received: #{invalid_logger.inspect}"
+          raise ArgumentError, "logger should be inherited from Contr::Logger::Base or be falsy, received: #{invalid_logger.inspect}"
         else
           Logger::Default.new
         end
@@ -111,7 +111,7 @@ module Contr
         in sampler: Sampler::Base => custom_sampler
           custom_sampler
         in sampler: invalid_sampler
-          raise ArgumentError, "sampler should be inherited from Contr::Sampler::Base or be falsey, received: #{invalid_sampler.inspect}"
+          raise ArgumentError, "sampler should be inherited from Contr::Sampler::Base or be falsy, received: #{invalid_sampler.inspect}"
         else
           Sampler::Default.new
         end
@@ -139,7 +139,7 @@ module Contr
         in rules: Async::Pool::Base => custom_pool
           custom_pool
         in rules: invalid_pool
-          raise ArgumentError, "rules pool should be inherited from Contr::Async::Pool::Base or be falsey, received: #{invalid_pool.inspect}"
+          raise ArgumentError, "rules pool should be inherited from Contr::Async::Pool::Base or be falsy, received: #{invalid_pool.inspect}"
         else
           nil
         end

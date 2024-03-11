@@ -156,7 +156,7 @@ RSpec.describe Contr::Base do
       it "raises validation error" do
         expect { contract }.to raise_error(
           ArgumentError,
-          "rules pool should be inherited from Contr::Async::Pool::Base or be falsey, received: :invalid_value"
+          "rules pool should be inherited from Contr::Async::Pool::Base or be falsy, received: :invalid_value"
         )
       end
     end
@@ -173,7 +173,7 @@ RSpec.describe Contr::Base do
       it "raises validation error" do
         expect { contract }.to raise_error(
           ArgumentError,
-          "logger should be inherited from Contr::Logger::Base or be falsey, received: :invalid_value"
+          "logger should be inherited from Contr::Logger::Base or be falsy, received: :invalid_value"
         )
       end
     end
@@ -190,7 +190,7 @@ RSpec.describe Contr::Base do
       it "raises validation error" do
         expect { contract }.to raise_error(
           ArgumentError,
-          "sampler should be inherited from Contr::Sampler::Base or be falsey, received: :invalid_value"
+          "sampler should be inherited from Contr::Sampler::Base or be falsy, received: :invalid_value"
         )
       end
     end
