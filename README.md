@@ -162,6 +162,9 @@ class SomeContract < Contr::Act
 end
 ```
 
+> [!NOTE]
+> Asynchronous execution of rules forces to check them all, not the smallest scope possible as with regular sequential execution. Make sure that potential extra calls to DB/network are OK (if they have place).
+
 It's also possible to define custom pool:
 
 ```ruby
