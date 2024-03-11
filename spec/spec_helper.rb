@@ -25,6 +25,9 @@ require "contr"
 # require all spec `support` files
 Dir["#{File.dirname(__FILE__)}/support/**/*.rb"].sort.each { |f| require f }
 
+# require all shared examples and contexts for `base`
+Dir["#{File.dirname(__FILE__)}/contr/base/**/*.rb"].sort.each { |f| require f }
+
 RSpec.configure do |config|
   config.mock_with :rspec do |mocks|
     mocks.verify_partial_doubles = true
