@@ -15,7 +15,7 @@ class SumContract < Contr::Act
   end
 
   guarantee :args_are_numbers do |args|
-    args.all? { |arg| arg.is_a?(Numeric) }
+    args.all?(Numeric)
   end
 
   expect :arg_1_is_float do |(arg_1, _)|
