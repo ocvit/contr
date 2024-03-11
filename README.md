@@ -32,9 +32,9 @@ Contract is called *__matched__* when:
 - *__at least one__* expectation is matched (if present)
 
 Rule is *__matched__* when it returns *__truthy__* value.\
-Rule is *__not matched__* when it returns *__falsey__* value (`nil`, `false`) or *__raises an error__*.
+Rule is *__not matched__* when it returns *__falsy__* value (`nil`, `false`) or *__raises an error__*.
 
-Contract is triggered *__after__* operation under guard is succesfully executed.
+Contract is triggered *__after__* operation under guard is successfully executed.
 
 ## Usage
 
@@ -216,14 +216,14 @@ Default sampler creates marshalized dumps of contract state in specified folder 
 }
 
 # default sampler can be reconfigured
-ConfigedSampler = Contr::Sampler::Default.new(
+ConfiguredSampler = Contr::Sampler::Default.new(
   folder: "/tmp/contract_dumps",                         # default: "/tmp/contracts"
   path_template: "%<contract_name>s_%<period_id>i.bin",  # default: "%<contract_name>s/%<period_id>i.dump"
   period: 3600                                           # default: 600 (= 10 minutes)
 )
 
 class SomeContract < Contr::Act
-  sampler ConfigedSampler
+  sampler ConfiguredSampler
 
   # ...
 end
@@ -305,14 +305,14 @@ Default logger logs contract state to specified stream in JSON format. State str
 }
 
 # default logger can be reconfigured
-ConfigedLogger = Contr::Logger::Default.new(
+ConfiguredLogger = Contr::Logger::Default.new(
   stream: $stderr,     # default: $stdout
   log_level: :warn,    # default: :debug
   tag: "shit-happened" # default: "contract-failed"
 )
 
 class SomeContract < Contr::Act
-  logger ConfigedLogger
+  logger ConfiguredLogger
 
   # ...
 end
@@ -400,11 +400,11 @@ class SomeContract < Contr::Act
     # ...
   end
 end
-# guarantees:  check_1
-# expecations: check_2
-# async:       pools: {main: <fixed>, rules: nil}
-# sampler:     Contr::Sampler::Default
-# logger:      Contr::Logger:Default
+# guarantees:   check_1
+# expectations: check_2
+# async:        pools: {main: <fixed>, rules: nil}
+# sampler:      Contr::Sampler::Default
+# logger:       Contr::Logger:Default
 
 class OtherContract < SomeContract
   async pools: {rules: Contr::Async::Pool::GlobalIO.new}
@@ -414,11 +414,11 @@ class OtherContract < SomeContract
     # ...
   end
 end
-# guarantees:  check_1, check_3
-# expecations: check_2
-# async        pools: {main: <fixed>, rules: <global_io>}
-# sampler:     CustomSampler
-# logger:      Contr::Logger:Default
+# guarantees:   check_1, check_3
+# expectations: check_2
+# async         pools: {main: <fixed>, rules: <global_io>}
+# sampler:      CustomSampler
+# logger:       Contr::Logger:Default
 
 class AnotherContract < OtherContract
   async pools: {main: Contr::Async::Pool::GlobalIO.new}
@@ -428,11 +428,11 @@ class AnotherContract < OtherContract
     # ...
   end
 end
-# guarantees:  check_1, check_3
-# expecations: check_2, check_4
-# async        pools: {main: <global_io>, rules: <global_io>}
-# sampler:     CustomSampler
-# logger:      nil
+# guarantees:   check_1, check_3
+# expectations: check_2, check_4
+# async         pools: {main: <global_io>, rules: <global_io>}
+# sampler:      CustomSampler
+# logger:       nil
 ```
 
 Rule block arguments can be accessed in different ways:
