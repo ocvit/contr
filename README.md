@@ -493,7 +493,7 @@ end
 
 ## Benchmarks
 
-Comparison of different pool configs for [IO blocking](https://github.com/ocvit/contr/benchmarks/io_task.rb) and [CPU intensive](https://github.com/ocvit/contr/benchmarks/cpu_task.rb) tasks can be found in [benchmarks](https://github.com/ocvit/contr/benchmarks/) folder.
+Comparison of different pool configs for [I/O blocking](https://github.com/ocvit/contr/blob/main/benchmarks/io_task.rb) and [CPU intensive](https://github.com/ocvit/contr/blob/main/benchmarks/cpu_task.rb) tasks can be found in [benchmarks](https://github.com/ocvit/contr/tree/main/benchmarks) folder.
 
 ## TODO
 
@@ -501,8 +501,8 @@ Comparison of different pool configs for [IO blocking](https://github.com/ocvit/
 - [x] Sampler  
 - [x] Logger  
 - [x] Sync matcher  
-- [ ] Async matcher  
-- [ ] Add `before` block for contract definition  
+- [x] Async matcher  
+- [ ] Add `before` block to contract definition  
 
 ## Development
 
