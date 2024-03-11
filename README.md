@@ -41,48 +41,52 @@ Contract is triggered *__after__* operation under guard is succesfully executed.
 Example of basic contract:
 
 ```ruby
-class PostRemovalContract < Contr::Act # or Contr::Base if you're a boring person
-  guarantee :verified_via_api do |user_id, post_id, _|
-    !API.post_exists?(user_id, post_id)
+class SumContract < Contr::Act # or Contr::Base if you're a boring person
+  guarantee :result_is_positive_float do |(_), result|
+    result.is_a?(Float) && result > 0
   end
 
-  guarantee :verified_via_web do |*, post_url|
-    !Web.post_exists?(post_url)
+  guarantee :args_are_numbers do |args|
+    args.all? { |arg| arg.is_a?(Numeric) }
   end
 
-  expect :removed_from_user_feed do |user_id, post_id, _|
-    !Feed::User.post_exists?(user_id, post_id)
+  expect :arg_1_is_float do |(arg_1, _)|
+    arg_1.is_a?(Float)
   end
 
-  expect :removed_from_global_feed do |user_id, post_id, _|
-    !Feed::Global.post_exists?(user_id, post_id)
+  expect :arg_2_is_float do |(_, arg_2)|
+    arg_2.is_a?(Float)
   end
 end
 
-contract = PostRemovalContract.new
+args = [1, 2.0]
+contract = SumContract.new
+
+contract.check(*args) { args.inject(:+) }
+# => 3.0
 ```
 
 Contract check can be run in 2 modes: `sync` and `async`.
 
 ### Sync
 
-In `sync` mode all rules are executed sequentially in the same thread with the operation.
+In `sync` mode rules are executed sequentially in the same thread with the operation.
 
-If contract is matched - operation result is returned.
+If contract matched - operation result is returned afterwards:
 
 ```ruby
-api_response = contract.check(user_id, post_id, post_url) { API.delete_post(*some_args) }
-# => {data: {deleted: true}}
+contract.check(*args) { 1 + 1 }
+# => 2
 ```
 
-If contract fails - the contract state is dumped via [Sampler](#Sampler), logged via [Logger](#Logger) and match error is raised:
+If contract failed - contract state is dumped via [Sampler](#Sampler), logged via [Logger](#Logger) and match error is raised:
 
 ```ruby
-contract.check(*args) { operation }
-# if one of the guarantees failed
+contract.check(*args) { 1 + 1 }
+# when one of the guarantees failed
 # => Contr::Matcher::GuaranteesNotMatched: failed rules: [...], args: [...]
 
-# if all expectations failed
+# when all expectations failed
 # => Contr::Matcher::ExpectationsNotMatched: failed rules: [...], args: [...]
 ```
 
@@ -91,11 +95,100 @@ If operation raises an error it will be propagated right away, without triggerin
 ```ruby
 contract.check(*args) { raise StandardError, "some error" }
 # => StandardError: some error
+# (no state dump, no log)
 ```
 
 ### Async
 
-WIP
+In `async` mode rules are executed in a separate thread. Operation result is returned immediately regardless of contract match status:
+
+```ruby
+contract.check_async(*args) { 1 + 1 }
+# => 2
+# (contract is still being checked in a background)
+#
+# if contract matched - nothing additional happens
+# if contract failed - state is dumped and logged as with `#check`
+```
+
+If operation raises an error it will be propagated right away, without triggering the contract itself:
+
+```ruby
+contract.check_async(*args) { raise StandardError, "some error" }
+# => StandardError: some error
+# (no state dump, no log)
+```
+
+Each contract instance can work with 2 dedicated thread pools:
+
+- `main` - to control a contract flow itself (always enabled)
+- `rules` - to execute rules asynchronously (disabled by default)
+
+There are couple of predefined pool primitives that can be used:
+
+```ruby
+# fixed
+# - works as fixed pool of size: 0..max_threads
+# - max_threads == vCPU cores, but can be overridden
+# - similar to `fast` provided by `concurrent-ruby`
+Contr::Async::Pool::Fixed.new
+Contr::Async::Pool::Fixed.new(max_threads: 9000)
+
+# io (global)
+# - provided by `concurrent-ruby`
+# - works as dynamic pool of almost unlimited size (danger!)
+# - quote: "recommended for long tasks with blocking I/O operations"
+Contr::Async::Pool::GlobalIO.new
+```
+
+Default contract `async` config looks like this:
+
+```ruby
+class SomeContract < Contr::Act
+  async pools: {
+    main: Contr::Async::Pool::Fixed.new,
+    rules: nil # disabled, rules are executed synchronously
+  }
+end
+```
+
+To enable asynchronous execution of rules:
+
+```ruby
+class SomeContract < Contr::Act
+  async pools: {
+    rules: Contr::Async::Pool::GlobalIO.new # or any other pool
+  }
+end
+```
+
+It's also possible to define custom pool:
+
+```ruby
+class CustomPool < Contr::Async::Pool::Base
+  # optional
+  def initialize(*some_args)
+    # ...
+  end
+
+  # required!
+  def create_executor
+    Concurrent::ThreadPoolExecutor.new(
+      min_threads: 0,
+      max_threads: 1234
+      # ...other opts
+    )
+  end
+end
+
+class SomeContract < Contr::Act
+  async pools: {
+    main: CustomPool.new(*some_args)
+  }
+end
+```
+
+Comparison of different pools configurations can be checked in [Benchmarks](#Benchmarks) section.
 
 ## Sampler
 
@@ -105,25 +198,25 @@ Default sampler creates marshalized dumps of contract state in specified folder 
 # state structure
 {
   ts:            "2024-02-26T14:16:28.044Z",
-  contract_name: "PostRemovalContract",
+  contract_name: "SumContract",
   failed_rules: [
-    {type: :expectation, name: :removed_from_user_feed, status: :unexpected_error, error: error_instance},
-    {type: :expectation, name: :removed_from_global_feed, status: :failed}
+    {type: :expectation, name: :arg_1_is_float, status: :failed},
+    {type: :expectation, name: :arg_2_check_that_raises, status: :unexpected_error, error: error_instance}
   ],
   ok_rules: [
-    {type: :guarantee, name: :verified_via_api, status: :ok},
-    {type: :guarantee, name: :verified_via_web, status: :ok}
+    {type: :guarantee, name: :result_is_positive_float, status: :ok},
+    {type: :guarantee, name: :args_are_numbers, status: :ok}
   ],
   async:  false,
-  args:   [1, 2, "url"],
-  result: {data: {deleted: true}}
+  args:   [1, 2.0],
+  result: 3.0
 }
 
 # default sampler can be reconfigured
 ConfigedSampler = Contr::Sampler::Default.new(
-  folder: "/tmp/contract_dumps",                       # default: "/tmp/contracts"
-  path_template: "%<contract_name>_%<period_id>i.bin", # default: "%<contract_name>s/%<period_id>i.dump"
-  period: 3600                                         # default: 600 (= 10 minutes)
+  folder: "/tmp/contract_dumps",                         # default: "/tmp/contracts"
+  path_template: "%<contract_name>s_%<period_id>i.bin",  # default: "%<contract_name>s/%<period_id>i.dump"
+  period: 3600                                           # default: 600 (= 10 minutes)
 )
 
 class SomeContract < Contr::Act
@@ -160,7 +253,7 @@ class CustomSampler < Contr::Sampler::Base
     # ...
   end
 
-  # required
+  # required!
   def sample!(state)
     # ...
   end
@@ -199,7 +292,7 @@ contract.sampler.read(contract_name: "SomeContract", period_id: "474750")
 
 ## Logger
 
-Default logger logs contract state to specified stream in JSON format. State structure is the same as for sampler with a small addition of `tag` field.
+Default logger logs contract state to specified stream in JSON format. State structure is the same as in sampler plus additional `tag` field:
 
 ```ruby
 # state structure
@@ -244,7 +337,7 @@ class CustomLogger < Contr::Sampler::Base
     # ...
   end
 
-  # required
+  # required!
   def log(state)
     # ...
   end
@@ -267,6 +360,31 @@ end
 
 ## Configuration
 
+Contract can be configured using arguments passed to `.new` method:
+
+```ruby
+class SomeContract < Contr::Act
+end
+
+contract = SomeContract.new(
+  async: {pools: {main: OtherPool.new, rules: AnotherPool.new}},
+  sampler: CustomSampler.new,
+  logger: CustomLogger.new
+)
+
+contract.main_pool
+# => #<OtherPool:...>
+
+contract.rules_pool
+# => #<AnotherPool:...>
+
+contract.sampler
+# => #<CustomSampler:...>
+
+contract.logger
+# => #<CustomLogger:...>
+```
+
 Contracts can be deeply inherited:
 
 ```ruby
@@ -281,10 +399,12 @@ class SomeContract < Contr::Act
 end
 # guarantees:  check_1
 # expecations: check_2
+# async:       pools: {main: <fixed>, rules: nil}
 # sampler:     Contr::Sampler::Default
 # logger:      Contr::Logger:Default
 
 class OtherContract < SomeContract
+  async pools: {rules: Contr::Async::Pool::GlobalIO.new}
   sampler CustomSampler.new
 
   guarantee :check_3 do
@@ -293,10 +413,12 @@ class OtherContract < SomeContract
 end
 # guarantees:  check_1, check_3
 # expecations: check_2
+# async        pools: {main: <fixed>, rules: <global_io>}
 # sampler:     CustomSampler
 # logger:      Contr::Logger:Default
 
 class AnotherContract < OtherContract
+  async pools: {main: Contr::Async::Pool::GlobalIO.new}
   logger nil
 
   expect :check_4 do
@@ -305,32 +427,28 @@ class AnotherContract < OtherContract
 end
 # guarantees:  check_1, check_3
 # expecations: check_2, check_4
+# async        pools: {main: <global_io>, rules: <global_io>}
 # sampler:     CustomSampler
 # logger:      nil
 ```
 
-Contract can be configured using args passed to `.new` method:
+Rule block arguments can be accessed in different ways:
 
 ```ruby
 class SomeContract < Contr::Act
-end
+  guarantee :all_args_used do |(arg_1, arg_2), result|
+    arg_1  # => 1
+    arg_2  # => 2
+    result # => 3
+  end
 
-contract = SomeContract.new(sampler: CustomSampler.new, logger: CustomLogger.new)
+  guarantee :result_ignored do |(arg_1, arg_2)|
+    arg_1  # => 1
+    arg_2  # => 2
+  end
 
-contract.sampler
-# => #<CustomSampler:...>
-
-contract.logger
-# => #<CustomLogger:...>
-```
-
-Rule block arguments are optional:
-
-```ruby
-class SomeContract < Contr::Act
-  guarantee :args_used do |arg_1, arg_2|
-    arg_1 # => 1
-    arg_2 # => 2
+  guarantee :check_args_ignored do |(_), result|
+    result # => 3
   end
 
   guarantee :args_not_used do
@@ -338,33 +456,15 @@ class SomeContract < Contr::Act
   end
 end
 
-SomeContract.new.check(1, 2) { operation }
+SomeContract.new.check(1, 2) { 1 + 2 }
 ```
 
-Each rule has access to contract variables:
-
-```ruby
-class SomeContract < Contr::Act
-  guarantee :check_1 do
-    @args         # => [1, [2, 3], {key: :value}]
-    @result       # => 2
-    @contract     # => #<SomeContract:...>
-    @guarantees   # => [{type: :guarantee, name: :check_1, block: #<Proc:...>}]
-    @expectations # => []
-    @sampler      # => #<Contr::Sampler::Default:...>
-    @logger       # => #<Contr::Logger::Default:...>
-  end
-end
-
-SomeContract.new.check(1, [2, 3], {key: :value}) { 1 + 1 }
-```
-
-Having access to `@result` can be really useful in contracts where operation produces a data that should be used inside the rules:
+Having access to `result` can be really useful in contracts where operation produces a data that must be used inside the rules:
 
 ```ruby
 class PostCreationContract < Contr::Act
-  guarantee :verified_via_api do |user_id|
-    post_id = @result["id"]
+  guarantee :verified_via_api do |(user_id), result|
+    post_id = result["id"]
     API.post_exists?(user_id, post_id)
   end
 
@@ -372,56 +472,28 @@ class PostCreationContract < Contr::Act
 end
 
 contract = PostCreationContract.new
-
 contract.check(user_id) { API.create_post(*some_args) }
 # => {"id":1050118621198921700, "text":"Post text", ...}
 ```
 
-Having access to `@guarantees` and `@expectations` makes possible building dynamic contracts (in case you really need it):
+Contract instances are fully isolated from check invocations and can be safely cached:
 
 ```ruby
-class SomeContract < Contr::Act
-  guarantee :guarantee_1 do
-    # add new guarantee to the end of guarantees list
-    @guarantees << {
-      type: :guarantee,
-      name: :guarantee_2,
-      block: proc do
-        puts "guarantee 2"
-        true
-      end
-    }
+module Contracts
+  PostRemoval         = PostRemovalContract.new
+  PostRemovalNoLogger = PostRemovalContract.new(logger: nil)
 
-    puts "guarantee 1"
-    true
-  end
-
-  expect :expect_1 do
-    # add new expectation to the end of expectations list
-    @expectations << {
-      type: :expectation,
-      name: :expect_2,
-      block: proc do |*args|
-        puts "expect 2, args: #{args}"
-        true
-      end
-    }
-
-    puts "expect 1"
-    false
-  end
+  # ...
 end
 
-SomeContract.new.check(1, 2) { operation }
-
-# it will print:
-# => guarantee 1
-# => guarantee 2
-# => expect 1
-# => expect 2, args: [1, 2]
+posts.each do |post|
+  Contracts::PostRemovalNoLogger.check_async(*args) { delete_post(post) }
+end
 ```
 
-Other instance variables (e.g. `@args`, `@logger` etc.) can be modified on the fly too but make sure you really know what you do.
+## Benchmarks
+
+Comparison of different pool configs for [IO blocking](https://github.com/ocvit/contr/benchmarks/io_task.rb) and [CPU intensive](https://github.com/ocvit/contr/benchmarks/cpu_task.rb) tasks can be found in [benchmarks](https://github.com/ocvit/contr/benchmarks/) folder.
 
 ## TODO
 
@@ -449,3 +521,8 @@ Bug reports and pull requests are welcome on GitHub at https://github.com/ocvit/
 ## License
 
 The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
+
+## Credits
+
+- [simple_contracts](https://github.com/bibendi/simple_contracts) by [bibendi](https://github.com/bibendi)
+- [poro_contract](https://github.com/sclinede/poro_contract/) by [sclinede](https://github.com/sclinede)
