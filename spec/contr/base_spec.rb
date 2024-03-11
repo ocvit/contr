@@ -18,8 +18,10 @@ RSpec.describe Contr::Base do
       it "has correct attributes" do
         expect(contract.guarantees).to eq []
         expect(contract.expectations).to eq []
-        expect(contract.logger).to be_an_instance_of Contr::Logger::Default
-        expect(contract.sampler).to be_an_instance_of Contr::Sampler::Default
+        expect(contract.logger).to be_default_logger
+        expect(contract.sampler).to be_default_sampler
+        expect(contract.main_pool).to be_fixed_async_pool
+        expect(contract.rules_pool).to be_nil
         expect(contract.name).to eq "ContractWithoutRules"
       end
     end
@@ -46,63 +48,123 @@ RSpec.describe Contr::Base do
           {type: :expectation, name: :e1, block: be_a(Proc)},
           {type: :expectation, name: :e2, block: be_a(Proc)}
         ])
-
-        expect(contract.logger).to be_an_instance_of Contr::Logger::Default
-        expect(contract.sampler).to be_an_instance_of Contr::Sampler::Default
-        expect(contract.name).to eq "ContractWithRules"
       end
     end
 
-    context "contract with custom logger and sampler" do
+    context "contract with custom config" do
       before do
         define_class("CustomLogger", Contr::Logger::Base)
-        define_class("TweakedCustomLogger", CustomLogger)
-
         define_class("CustomSampler", Contr::Sampler::Base)
-        define_class("TweakedCustomSampler", CustomSampler)
+        define_class("CustomRulesPool", Contr::Async::Pool::Base)
       end
 
       context "when set via contract definition" do
         before do
-          define_contract_class("ContractWithCustomLoggerAndSampler") do
-            logger TweakedCustomLogger.new
-            sampler TweakedCustomSampler.new
+          define_contract_class("ContractWithCustomConfig") do
+            async pools: {rules: CustomRulesPool.new}
+            logger CustomLogger.new
+            sampler CustomSampler.new
           end
         end
 
-        subject(:contract) { ContractWithCustomLoggerAndSampler.new }
+        subject(:contract) { ContractWithCustomConfig.new }
 
         it "has correct attributes" do
-          expect(contract.logger).to be_an_instance_of TweakedCustomLogger
-          expect(contract.sampler).to be_an_instance_of TweakedCustomSampler
+          expect(contract.logger).to be_an_instance_of CustomLogger
+          expect(contract.sampler).to be_an_instance_of CustomSampler
+          expect(contract.main_pool).to be_fixed_async_pool
+          expect(contract.rules_pool).to be_an_instance_of CustomRulesPool
         end
       end
 
       context "when set via instance opts" do
         before do
-          define_contract_class("ContractWithCustomLoggerAndSamplerFromOpts")
+          define_contract_class("ContractWithCustomConfigFromOpts")
         end
 
         subject(:contract) do
-          ContractWithCustomLoggerAndSamplerFromOpts.new(
-            logger: TweakedCustomLogger.new,
-            sampler: TweakedCustomSampler.new
+          ContractWithCustomConfigFromOpts.new(
+            async: {pools: {rules: CustomRulesPool.new}},
+            logger: CustomLogger.new,
+            sampler: CustomSampler.new
           )
         end
 
         it "has correct attributes" do
-          expect(contract.logger).to be_an_instance_of TweakedCustomLogger
-          expect(contract.sampler).to be_an_instance_of TweakedCustomSampler
+          expect(contract.logger).to be_an_instance_of CustomLogger
+          expect(contract.sampler).to be_an_instance_of CustomSampler
+          expect(contract.main_pool).to be_fixed_async_pool
+          expect(contract.rules_pool).to be_an_instance_of CustomRulesPool
         end
+      end
+    end
+
+    context "contract with disabled main pool" do
+      before do
+        define_contract_class("ContractWithDisabledMainPool") do
+          async pools: {main: nil}
+        end
+      end
+
+      subject(:contract) { ContractWithDisabledMainPool.new }
+
+      it "raises validation error" do
+        expect { contract }.to raise_error(ArgumentError, "main pool can't be disabled")
+      end
+    end
+
+    context "contract with invalid main pool" do
+      before do
+        define_contract_class("ContractWithInvalidMainPoolConfig") do
+          async pools: {main: :invalid_value}
+        end
+      end
+
+      subject(:contract) { ContractWithInvalidMainPoolConfig.new }
+
+      it "raises validation error" do
+        expect { contract }.to raise_error(
+          ArgumentError,
+          "main pool should be inherited from Contr::Async::Pool::Base, received: :invalid_value"
+        )
+      end
+    end
+
+    context "contract with disabled rules pool" do
+      before do
+        define_contract_class("ContractWithDisabledRulesPool") do
+          async pools: {rules: false}
+        end
+      end
+
+      subject(:contract) { ContractWithDisabledRulesPool.new }
+
+      it "has correct attribute" do
+        expect(contract.rules_pool).to be_nil
+      end
+    end
+
+    context "contract with invalid rules pool" do
+      before do
+        define_contract_class("ContractWithInvalidRulesPool") do
+          async pools: {rules: :invalid_value}
+        end
+      end
+
+      subject(:contract) { ContractWithInvalidRulesPool.new }
+
+      it "raises validation error" do
+        expect { contract }.to raise_error(
+          ArgumentError,
+          "rules pool should be inherited from Contr::Async::Pool::Base or be falsey, received: :invalid_value"
+        )
       end
     end
 
     context "contract with invalid logger" do
       before do
-        define_class("InvalidLogger", Object)
-
         define_contract_class("ContractWithInvalidLogger") do
-          logger InvalidLogger.new
+          logger :invalid_value
         end
       end
 
@@ -111,17 +173,15 @@ RSpec.describe Contr::Base do
       it "raises validation error" do
         expect { contract }.to raise_error(
           ArgumentError,
-          /logger should be inherited from Contr::Logger::Base or be falsey, received:.*InvalidLogger/
+          "logger should be inherited from Contr::Logger::Base or be falsey, received: :invalid_value"
         )
       end
     end
 
     context "contract with invalid sampler" do
       before do
-        define_class("InvalidSampler", Object)
-
         define_contract_class("ContractWithInvalidSampler") do
-          sampler InvalidSampler.new
+          sampler :invalid_value
         end
       end
 
@@ -130,7 +190,7 @@ RSpec.describe Contr::Base do
       it "raises validation error" do
         expect { contract }.to raise_error(
           ArgumentError,
-          /\Asampler should be inherited from Contr::Sampler::Base or be falsey, received:.+InvalidSampler.+\z/
+          "sampler should be inherited from Contr::Sampler::Base or be falsey, received: :invalid_value"
         )
       end
     end
@@ -147,7 +207,7 @@ RSpec.describe Contr::Base do
 
       it "has correct attributes" do
         expect(contract.logger).to eq nil
-        expect(contract.sampler).to eq false
+        expect(contract.sampler).to eq nil
       end
     end
 
@@ -156,7 +216,8 @@ RSpec.describe Contr::Base do
         define_class("CustomLogger", Contr::Logger::Base)
         define_class("CustomSampler", Contr::Sampler::Base)
 
-        define_contract_class("ContractWithCustomLogger") do
+        define_contract_class("ContractLevel1") do
+          async pools: {rules: Contr::Async::Pool::GlobalIO.new}
           logger CustomLogger.new
           sampler nil
 
@@ -165,7 +226,8 @@ RSpec.describe Contr::Base do
           expect(:e1)    {}
         end
 
-        define_contract_class("ContractWithCustomSampler", ContractWithCustomLogger) do
+        define_contract_class("ContractLevel2", ContractLevel1) do
+          async pools: {main: Contr::Async::Pool::Fixed.new}
           logger nil
           sampler CustomSampler.new
 
@@ -173,11 +235,11 @@ RSpec.describe Contr::Base do
           expect(:e2)    {}
         end
 
-        define_contract_class("DeeplyInheritedContract", ContractWithCustomSampler)
-        define_contract_class("AnotherDeeplyInheritedContract", DeeplyInheritedContract)
+        define_contract_class("ContractLevel3", ContractLevel2)
+        define_contract_class("ContractLevel4", ContractLevel3)
       end
 
-      subject(:contract) { AnotherDeeplyInheritedContract.new }
+      subject(:contract) { ContractLevel4.new }
 
       it "inherits configs from parent contracts" do
         expect(contract.logger).to eq nil
@@ -191,309 +253,97 @@ RSpec.describe Contr::Base do
           {type: :expectation, name: :e1, block: be_a(Proc)},
           {type: :expectation, name: :e2, block: be_a(Proc)}
         ]
+        expect(contract.main_pool).to be_fixed_async_pool
+        expect(contract.rules_pool).to be_global_io_async_pool
       end
     end
   end
 
   describe "#check" do
-    before :all do
-      Timecop.freeze(Time.utc(1999))
-      @dump_folder = "/tmp/contract_tests/#{SecureRandom.uuid}"
-      @dump_period_id = "1525248"
-    end
-
-    after :all do
-      Timecop.return
-    end
-
-    after do
-      FileUtils.rm_rf(@dump_folder)
-    end
+    include_context "contract check setup"
 
     before do
-      # fixes visibility in block passed to `define_contract_class`
-      dump_folder = @dump_folder
-
-      define_contract_class("BaseContract") do
-        logger Contr::Logger::Default.new(stream: IO::NULL)
-        sampler Contr::Sampler::Default.new(folder: dump_folder)
-      end
+      define_contract_class("BaseContract", PreConfiguredContract)
     end
-
-    let(:contract)         { Object.const_get(contract_name).new }
-    let(:operation)        { proc { 1 + 1 } }
-    let(:operation_result) { 2 }
-    let(:args)             { [1, 2, 3] }
 
     subject(:result) { contract.check(*args) { operation.call } }
 
-    let(:dump_info) { {path: "#{@dump_folder}/#{contract_name}/#{@dump_period_id}.dump"} }
-    let(:log_state) { state.merge(dump_info: dump_info) }
+    it_behaves_like "contract check"
+    it_behaves_like "contract matched"
+    it_behaves_like "contract failed in sync check"
+  end
 
-    context "when contract successfully matched" do
-      context "without unexpected errors in rules" do
-        context "with both guarantees and expectations" do
-          before do
-            define_contract_class(contract_name, BaseContract) do
-              guarantee(:g1) { true }
-              guarantee(:g2) { true }
-              expect(:e1)    { false }
-              expect(:e2)    { true }
-            end
+  describe "#check_async" do
+    include_context "contract check setup"
+
+    subject(:result) { contract.check_async(*args) { operation.call } }
+
+    context "with async rules" do
+      context "using default pool" do
+        before do
+          define_contract_class("BaseContract", PreConfiguredContract) do
+            async pools: {rules: Contr::Async::Pool::Fixed.new}
           end
 
-          let(:contract_name) { "OkContractNoUnexpectedErrors" }
-
-          it "returns operation result, does not sample, does not log" do
-            not_expect_sample
-            not_expect_log
-
-            expect(result).to eq operation_result
-          end
+          run_async_matcher_inline!
         end
 
-        context "with guarantees only" do
-          before do
-            define_contract_class(contract_name, BaseContract) do
-              guarantee(:g1) { true }
-              guarantee(:g2) { true }
-            end
-          end
-
-          let(:contract_name) { "OkContractGuaranteesOnly" }
-
-          it "returns operation result, does not sample, does not log" do
-            not_expect_sample
-            not_expect_log
-
-            expect(result).to eq operation_result
-          end
-        end
-
-        context "with expectations only" do
-          before do
-            define_contract_class(contract_name, BaseContract) do
-              expect(:e1) { false }
-              expect(:e2) { true }
-            end
-          end
-
-          let(:contract_name) { "OkContractExpectationsOnly" }
-
-          it "returns operation result, does not sample, does not log" do
-            not_expect_sample
-            not_expect_log
-
-            expect(result).to eq operation_result
-          end
-        end
+        it_behaves_like "contract check"
+        it_behaves_like "contract matched"
+        it_behaves_like "contract failed in async check with async rules"
       end
 
-      context "with unexpected error in some of the expectations" do
+      context "using global pools" do
         before do
-          define_contract_class(contract_name, BaseContract) do
-            guarantee(:g1) { true }
-            guarantee(:g2) { true }
-            expect(:e1)    { raise StandardError, "some error" }
-            expect(:e2)    { true }
+          define_contract_class("BaseContract", PreConfiguredContract) do
+            async pools: {
+              main: Contr::Async::Pool::Fixed.new,
+              rules: Contr::Async::Pool::GlobalIO.new
+            }
           end
+
+          run_async_matcher_inline!
         end
 
-        let(:contract_name) { "OkContractUnexpectedErrorInExpectation" }
-
-        it "returns operation result, does not sample, does not log" do
-          not_expect_sample
-          not_expect_log
-
-          expect(result).to eq operation_result
-        end
+        it_behaves_like "contract check"
+        it_behaves_like "contract matched"
+        it_behaves_like "contract failed in async check with async rules"
       end
     end
 
-    context "when contract failed" do
-      context "when guarantees failed" do
-        before do
-          define_contract_class(contract_name, BaseContract) do
-            guarantee(:g1) { true }
-            guarantee(:g2) { false }
-            expect(:e1)    { raise StandardError, "some error" }
-            expect(:e2)    { false }
-          end
-        end
-
-        let(:contract_name) { "FailedContractGuaranteesNotMatched" }
-        let(:state) do
-          {
-            ts:            "1999-01-01T00:00:00.000Z",
-            contract_name: contract_name,
-            failed_rules:  [{type: :guarantee, name: :g2, status: :failed}],
-            ok_rules:      [{type: :guarantee, name: :g1, status: :ok}],
-            async:         false,
-            args:          [1, 2, 3],
-            result:        operation_result
-          }
-        end
-
-        it "creates sample, writes to log and raises an error" do
-          expect_sample_with(state)
-          expect_log_with(log_state)
-
-          expect { result }.to raise_error(
-            Contr::Matcher::GuaranteesNotMatched,
-            "failed rules: [[:guarantee, :g2, :failed]], args: [1, 2, 3]"
-          )
-        end
-      end
-
-      context "when expectations failed" do
-        before do
-          define_contract_class(contract_name, BaseContract) do
-            guarantee(:g1) { true }
-            guarantee(:g2) { true }
-            expect(:e1)    { raise StandardError, "some error" }
-            expect(:e2)    { false }
-            expect(:e3)    { false }
-          end
-        end
-
-        let(:contract_name) { "FailedContractExpectationsNotMatched" }
-        let(:state) do
-          {
-            ts:            "1999-01-01T00:00:00.000Z",
-            contract_name: contract_name,
-            failed_rules: [
-              {type: :expectation, name: :e1, status: :unexpected_error, error: be_a(StandardError)},
-              {type: :expectation, name: :e2, status: :failed},
-              {type: :expectation, name: :e3, status: :failed}
-            ],
-            ok_rules: [
-              {type: :guarantee, name: :g1, status: :ok},
-              {type: :guarantee, name: :g2, status: :ok}
-            ],
-            async:  false,
-            args:   [1, 2, 3],
-            result: operation_result
-          }
-        end
-
-        it "creates sample, writes to log and raises an error" do
-          expect_sample_with(state)
-          expect_log_with(log_state)
-
-          expect { result }.to raise_error(
-            Contr::Matcher::ExpectationsNotMatched,
-            "failed rules: [[:expectation, :e1, :unexpected_error, #<StandardError: some error>], [:expectation, :e2, :failed], [:expectation, :e3, :failed]], args: [1, 2, 3]"
-          )
-        end
-      end
-
-      context "when sampler and logger are disabled" do
-        before do
-          define_contract_class(contract_name, BaseContract) do
-            logger nil
-            sampler nil
-
-            guarantee(:g1) { false }
-          end
-        end
-
-        let(:contract_name) { "FailedContractSamplerAndLoggerDisabled" }
-
-        it "raises an error, does not sample, does not log" do
-          not_expect_sample
-          not_expect_log
-
-          expect { result }.to raise_error(
-            Contr::Matcher::GuaranteesNotMatched,
-            "failed rules: [[:guarantee, :g1, :failed]], args: [1, 2, 3]"
-          )
-        end
-      end
-
-      context "when sample already exists" do
-        before do
-          define_contract_class(contract_name, BaseContract) do
-            guarantee(:g1) { false }
-          end
-
-          create_empty_file(dump_info[:path])
-        end
-
-        let(:contract_name) { "FailedContractSampleExists" }
-        let(:state) do
-          {
-            ts:            "1999-01-01T00:00:00.000Z",
-            contract_name: contract_name,
-            failed_rules:  [{type: :guarantee, name: :g1, status: :failed}],
-            ok_rules:      [],
-            async:         false,
-            args:          [1, 2, 3],
-            result:        operation_result
-          }
-        end
-
-        it "does not create new sample, logs original state and raises an error" do
-          expect_sample_with(state)
-          expect_log_with(state)
-
-          expect { result }.to raise_error(
-            Contr::Matcher::GuaranteesNotMatched,
-            "failed rules: [[:guarantee, :g1, :failed]], args: [1, 2, 3]"
-          )
-        end
-      end
-    end
-
-    context "alternative ways of handling args" do
+    context "with sync rules" do
       before do
-        define_contract_class(contract_name, BaseContract) do
-          guarantee(:g1) { true }
-          guarantee(:g2) { |arg_1, _| arg_1 == 1 }
-          guarantee(:g3) { |_, arg_2| arg_2 == 2 }
-          guarantee(:g4) { @args == [1, 2] }
-          guarantee(:g5) { @result == 2 }
-          guarantee(:g6) { @contract.is_a?(ContractWithAllPossibleArgs) }
-          guarantee(:g7) { @guarantees.size == 8 && @expectations.size == 1 }
-          guarantee(:g8) { @logger.is_a?(Contr::Logger::Default) }
-          expect(:e1)    { @sampler.is_a?(Contr::Sampler::Default) }
+        define_contract_class("BaseContract", PreConfiguredContract) do
+          async pools: {rules: nil}
+        end
+
+        run_async_matcher_inline!
+      end
+
+      it_behaves_like "contract check"
+      it_behaves_like "contract matched"
+      it_behaves_like "contract failed in async check with sync rules"
+    end
+
+    context "when async matcher not inlined" do
+      before do
+        define_contract_class(contract_name, PreConfiguredContract) do
+          expect(:g1) { true }
         end
       end
 
-      let(:contract_name) { "ContractWithAllPossibleArgs" }
-      let(:args) { [1, 2] }
+      let(:contract_name) { "ContractRegularAsyncCheck" }
 
-      it "makes args available for all the rules" do
+      it "does not wait for contract future to resolve" do
+        expect_any_instance_of(Concurrent::Future).not_to receive(:wait!)
+
         expect(result).to eq operation_result
       end
     end
-
-    context "when checked operation raises an error" do
-      let(:contract_name) { "BaseContract" }
-      let(:operation) { proc { raise StandardError, "some error" } }
-
-      it "raises an error right away, does not sample, does not log" do
-        not_expect_sample
-        not_expect_log
-
-        expect { result }.to raise_error(StandardError, "some error")
-      end
-    end
   end
 
-  def expect_log_with(*args)
-    expect(contract.logger).to receive(:log).with(*args).once.and_call_original
-  end
-
-  def expect_sample_with(*args)
-    expect(contract.sampler).to receive(:sample!).with(*args).once.and_call_original
-  end
-
-  def not_expect_log
-    expect(contract.logger).to_not receive(:log)
-  end
-
-  def not_expect_sample
-    expect(contract.sampler).to_not receive(:sample!)
+  def run_async_matcher_inline!
+    allow_any_instance_of(Contr::Matcher::Async).to receive(:inline?).and_return(true)
   end
 end
 

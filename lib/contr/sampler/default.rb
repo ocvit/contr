@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "fileutils"
+
 module Contr
   class Sampler
     class Default < Sampler::Base
