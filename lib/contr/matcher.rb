@@ -23,17 +23,14 @@ module Contr
     end
 
     class Base
+      extend Forwardable
+
+      def_delegators :@contract, :guarantees, :expectations, :logger, :sampler, :main_pool, :rules_pool
+
       def initialize(contract, args, result)
         @contract = contract
         @args     = args
         @result   = result
-
-        # def_delegators would be slickier but it breaks consistency of
-        # variables names when used within the rules definitions
-        @guarantees   = @contract.guarantees
-        @expectations = @contract.expectations
-        @sampler      = @contract.sampler
-        @logger       = @contract.logger
       end
 
       def match
@@ -42,28 +39,51 @@ module Contr
 
       private
 
-      def match_rule(rule)
+      def any_failed?(rules)
+        rules.any? { |rule| rule_failed?(rule) }
+      end
+
+      def all_failed?(rules)
+        !rules.empty? && rules.all? { |rule| rule_failed?(rule) }
+      end
+
+      def rule_failed?(rule)
+        rule = check_rule(rule) unless rule.key?(:status)
+
+        if rule[:status] == :ok
+          @ok_rules << rule
+          false
+        else
+          @failed_rules << rule
+          true
+        end
+      end
+
+      def check_rule(rule)
+        status_data = call_rule(rule)
+        rule.slice(:type, :name).merge(status_data)
+      end
+
+      def call_rule(rule)
         block = rule[:block]
 
-        block_result = instance_exec(*@args, &block)
+        block_result = block.parameters.empty? ? block.call : block.call(@args, @result)
         block_result ? {status: :ok} : {status: :failed}
       rescue => error
         {status: :unexpected_error, error: error}
       end
 
       def dump_state!
-        state = compile_state
-
-        if @sampler
-          dump_info = @sampler.sample!(state)
+        if sampler
+          dump_info = sampler.sample!(state)
           state[:dump_info] = dump_info if dump_info
         end
 
-        @logger&.log(state)
+        logger&.log(state)
       end
 
-      def compile_state
-        {
+      def state
+        @state ||= {
           ts:            Time.now.utc.iso8601(3),
           contract_name: @contract.name,
           failed_rules:  @failed_rules,
