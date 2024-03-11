@@ -5,6 +5,10 @@ module Contr
     class << self
       attr_reader :config, :guarantees, :expectations
 
+      def async(async)
+        set_config(:async, async)
+      end
+
       def logger(logger)
         set_config(:logger, logger)
       end
@@ -39,19 +43,26 @@ module Contr
       end
     end
 
-    attr_reader :logger, :sampler
+    attr_reader :config, :logger, :sampler, :main_pool, :rules_pool
 
     def initialize(instance_config = {})
-      @logger = choose_logger(instance_config)
-      @sampler = choose_sampler(instance_config)
+      @config = merge_configs(instance_config)
 
-      validate_logger!
-      validate_sampler!
+      init_logger!
+      init_sampler!
+      init_main_pool!
+      init_rules_pool!
     end
 
     def check(*args)
       result = yield
       Matcher::Sync.new(self, args, result).match
+      result
+    end
+
+    def check_async(*args)
+      result = yield
+      Matcher::Async.new(self, args, result).match
       result
     end
 
@@ -69,58 +80,77 @@ module Contr
 
     private
 
-    def choose_logger(instance_config)
-      parent_config = find_parent_config(:logger)
+    using Refines::Hash
 
-      case [instance_config, self.class.config, parent_config]
-      in [{logger: }, *]
-        logger
-      in [_, {logger: }, _]
-        logger
-      in [*, {logger: }]
-        logger
-      else
-        Logger::Default.new
-      end
+    def merge_configs(instance_config)
+      configs = contracts_chain.filter_map(&:config)
+      configs << instance_config
+
+      configs.inject(&:deep_merge) || {}
     end
 
-    def choose_sampler(instance_config)
-      parent_config = find_parent_config(:sampler)
-
-      case [instance_config, self.class.config, parent_config]
-      in [{sampler: }, *]
-        sampler
-      in [_, {sampler: }, _]
-        sampler
-      in [*, {sampler: }]
-        sampler
-      else
-        Sampler::Default.new
-      end
+    def init_logger!
+      @logger ||=
+        case config
+        in logger: nil | false
+          nil
+        in logger: Logger::Base => custom_logger
+          custom_logger
+        in logger: invalid_logger
+          raise ArgumentError, "logger should be inherited from Contr::Logger::Base or be falsey, received: #{invalid_logger.inspect}"
+        else
+          Logger::Default.new
+        end
     end
 
-    def find_parent_config(key)
-      parents = self.class.ancestors.take_while { |klass| klass != Contr::Base }.drop(1)
-      parents.detect { |klass| klass.config&.key?(key) }&.config
+    def init_sampler!
+      @sampler ||=
+        case config
+        in sampler: nil | false
+          nil
+        in sampler: Sampler::Base => custom_sampler
+          custom_sampler
+        in sampler: invalid_sampler
+          raise ArgumentError, "sampler should be inherited from Contr::Sampler::Base or be falsey, received: #{invalid_sampler.inspect}"
+        else
+          Sampler::Default.new
+        end
+    end
+
+    def init_main_pool!
+      @main_pool ||=
+        case config.dig(:async, :pools)
+        in main: nil | false
+          raise ArgumentError, "main pool can't be disabled"
+        in main: Async::Pool::Base => custom_pool
+          custom_pool
+        in main: invalid_pool
+          raise ArgumentError, "main pool should be inherited from Contr::Async::Pool::Base, received: #{invalid_pool.inspect}"
+        else
+          Async::Pool::Fixed.new
+        end
+    end
+
+    def init_rules_pool!
+      @rules_pool ||=
+        case config.dig(:async, :pools)
+        in rules: nil | false
+          nil
+        in rules: Async::Pool::Base => custom_pool
+          custom_pool
+        in rules: invalid_pool
+          raise ArgumentError, "rules pool should be inherited from Contr::Async::Pool::Base or be falsey, received: #{invalid_pool.inspect}"
+        else
+          nil
+        end
     end
 
     def aggregate_rules(rule_type)
-      contracts_chain = self.class.ancestors.take_while { |klass| klass != Contr::Base }.reverse
       contracts_chain.flat_map(&rule_type).compact
     end
 
-    def validate_logger!
-      return unless logger
-      return if logger.class.ancestors.include?(Logger::Base)
-
-      raise ArgumentError, "logger should be inherited from Contr::Logger::Base or be falsey, received: #{logger.inspect}"
-    end
-
-    def validate_sampler!
-      return unless sampler
-      return if sampler.class.ancestors.include?(Sampler::Base)
-
-      raise ArgumentError, "sampler should be inherited from Contr::Sampler::Base or be falsey, received: #{sampler.inspect}"
+    def contracts_chain
+      @contracts_chain ||= self.class.ancestors.take_while { |klass| klass != Contr::Base }.reverse
     end
   end
 
