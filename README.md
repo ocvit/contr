@@ -137,7 +137,6 @@ Contr::Async::Pool::Fixed.new(max_threads: 9000)
 # io (global)
 # - provided by `concurrent-ruby`
 # - works as a dynamic pool of almost unlimited size (danger!)
-# - quote: "recommended for long tasks with blocking I/O operations"
 Contr::Async::Pool::GlobalIO.new
 ```
 
