@@ -506,7 +506,8 @@ Comparison of different pool configs for [I/O blocking](https://github.com/ocvit
 - [x] Logger  
 - [x] Sync matcher  
 - [x] Async matcher  
-- [ ] Add `before` block to contract definition  
+- [ ] Add `before` block for rules variables pre-initialization
+- [ ] Add `meta` hash to have ability to capture additional debug data from within the rules
 
 ## Development
 
