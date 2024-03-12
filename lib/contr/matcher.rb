@@ -25,12 +25,12 @@ module Contr
     class Base
       extend Forwardable
 
-      def_delegators :@contract, :guarantees, :expectations, :logger, :sampler, :main_pool, :rules_pool
+      def_delegators :@contract, :logger, :sampler, :main_pool, :rules_pool, :guarantees, :expectations
 
       def initialize(contract, args, result)
         @contract = contract
-        @args     = args
-        @result   = result
+        @args     = args.freeze
+        @result   = result.freeze
       end
 
       def match
