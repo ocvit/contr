@@ -23,6 +23,7 @@ RSpec.describe Contr::Base do
         expect(contract.main_pool).to be_fixed_async_pool
         expect(contract.rules_pool).to be_nil
         expect(contract.name).to eq "ContractWithoutRules"
+        expect(contract.frozen?).to eq true
       end
     end
 
@@ -279,7 +280,7 @@ RSpec.describe Contr::Base do
     subject(:result) { contract.check_async(*args) { operation.call } }
 
     context "with async rules" do
-      context "using default pool" do
+      context "using fixed pool" do
         before do
           define_contract_class("BaseContract", PreConfiguredContract) do
             async pools: {rules: Contr::Async::Pool::Fixed.new}
@@ -293,13 +294,10 @@ RSpec.describe Contr::Base do
         it_behaves_like "contract failed in async check with async rules"
       end
 
-      context "using global pools" do
+      context "using global pool" do
         before do
           define_contract_class("BaseContract", PreConfiguredContract) do
-            async pools: {
-              main: Contr::Async::Pool::Fixed.new,
-              rules: Contr::Async::Pool::GlobalIO.new
-            }
+            async pools: {rules: Contr::Async::Pool::GlobalIO.new}
           end
 
           run_async_matcher_inline!

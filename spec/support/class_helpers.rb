@@ -6,7 +6,7 @@ module ClassHelpers
     stub_const(class_name, klass)
   end
 
-  def define_contract_class(contract_name, superclass = described_class, &block)
+  def define_contract_class(contract_name, superclass = Contr::Base, &block)
     define_class(contract_name, superclass, &block)
   end
 end
