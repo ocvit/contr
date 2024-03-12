@@ -43,7 +43,7 @@ module Contr
       end
     end
 
-    attr_reader :config, :logger, :sampler, :main_pool, :rules_pool
+    attr_reader :config, :logger, :sampler, :main_pool, :rules_pool, :guarantees, :expectations
 
     def initialize(instance_config = {})
       @config = merge_configs(instance_config)
@@ -52,6 +52,11 @@ module Contr
       init_sampler!
       init_main_pool!
       init_rules_pool!
+
+      aggregate_guarantees!
+      aggregate_expectations!
+
+      freeze
     end
 
     def check(*args)
@@ -70,14 +75,6 @@ module Contr
       self.class.name
     end
 
-    def guarantees
-      @guarantees ||= aggregate_rules(:guarantees)
-    end
-
-    def expectations
-      @expectations ||= aggregate_rules(:expectations)
-    end
-
     private
 
     using Refines::Hash
@@ -86,11 +83,12 @@ module Contr
       configs = contracts_chain.filter_map(&:config)
       configs << instance_config
 
-      configs.inject(&:deep_merge) || {}
+      merged = configs.inject(&:deep_merge) || {}
+      merged.freeze
     end
 
     def init_logger!
-      @logger ||=
+      @logger =
         case config
         in logger: nil | false
           nil
@@ -104,7 +102,7 @@ module Contr
     end
 
     def init_sampler!
-      @sampler ||=
+      @sampler =
         case config
         in sampler: nil | false
           nil
@@ -118,7 +116,7 @@ module Contr
     end
 
     def init_main_pool!
-      @main_pool ||=
+      @main_pool =
         case config.dig(:async, :pools)
         in main: nil | false
           raise ArgumentError, "main pool can't be disabled"
@@ -132,7 +130,7 @@ module Contr
     end
 
     def init_rules_pool!
-      @rules_pool ||=
+      @rules_pool =
         case config.dig(:async, :pools)
         in rules: nil | false
           nil
@@ -143,6 +141,14 @@ module Contr
         else
           nil
         end
+    end
+
+    def aggregate_guarantees!
+      @guarantees = aggregate_rules(:guarantees).freeze
+    end
+
+    def aggregate_expectations!
+      @expectations = aggregate_rules(:expectations).freeze
     end
 
     def aggregate_rules(rule_type)
