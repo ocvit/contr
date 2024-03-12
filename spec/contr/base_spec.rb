@@ -24,6 +24,7 @@ RSpec.describe Contr::Base do
         expect(contract.rules_pool).to be_nil
         expect(contract.name).to eq "ContractWithoutRules"
         expect(contract.frozen?).to eq true
+        expect(contract.config.frozen?).to eq true
       end
     end
 

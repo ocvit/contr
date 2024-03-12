@@ -83,7 +83,8 @@ module Contr
       configs = contracts_chain.filter_map(&:config)
       configs << instance_config
 
-      configs.inject(&:deep_merge) || {}
+      merged = configs.inject(&:deep_merge) || {}
+      merged.freeze
     end
 
     def init_logger!
