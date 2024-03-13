@@ -43,7 +43,7 @@ Example of basic contract:
 ```ruby
 class SumContract < Contr::Act # or Contr::Base if you're a boring person
   guarantee :result_is_positive_float do |(_), result|
-    result.is_a?(Float) && result > 0
+    result.is_a?(Float) && result.positive?
   end
 
   guarantee :args_are_numbers do |args|
