@@ -162,7 +162,7 @@ end
 ```
 
 > [!NOTE]
-> Asynchronous execution of rules forces to check them all - not the smallest scope possible as with the sequential one. Make sure that potential extra calls to DB/network are OK (if they have place).
+> Asynchronous execution of rules forces to check them all - not the minimally required scope as with the synchronous one. Make sure that potential extra calls to DB/network are OK (if they have place).
 
 It's also possible to define custom pool:
 
@@ -284,17 +284,17 @@ contract.sampler
 
 # using absolute path
 contract.sampler.read(path: "/tmp/contracts/SomeContract/474750.dump")
-# => {ts: "2024-02-26T14:16:28.044Z", contract_name: "SomeContract", failed_rules: [...], ...}
+# => {ts: "2024-02-26T14:16:28.044Z", contract_name: "SumContract", failed_rules: [...], ...}
 
-# using `contract_name` + `period_id` args
+# using `contract_name` and `period_id` args
 # it uses `folder` and `path_template` from sampler config
 contract.sampler.read(contract_name: "SomeContract", period_id: "474750")
-# => {ts: "2024-02-26T14:16:28.044Z", contract_name: "SomeContract", failed_rules: [...], ...}
+# => {ts: "2024-02-26T14:16:28.044Z", contract_name: "SumContract", failed_rules: [...], ...}
 ```
 
 ## Logger
 
-Default logger logs contract state to specified stream in JSON format. State structure is the same as in sampler plus additional `tag` field:
+Default logger logs contract state to specified stream in JSON format. State structure is the same as in sampler with addition of `tag` field:
 
 ```ruby
 # state structure
@@ -317,7 +317,7 @@ class SomeContract < Contr::Act
 end
 
 # it will print:
-# => W, [2024-02-27T14:36:53.607088 #58112]  WARN -- : {"ts":"...","contract_name":"...", ... "tag":"shit-happened"}
+# => W, [2024-02-26T14:16:28.043910 #58112]  WARN -- : {"ts":"...","contract_name":"...", ... "tag":"shit-happened"}
 ```
 
 Logger is enabled by default:
@@ -465,8 +465,8 @@ Having access to `result` can be really useful in contracts where operation prod
 
 ```ruby
 class PostCreationContract < Contr::Act
-  guarantee :verified_via_api do |(user_id), result|
-    post_id = result["id"]
+  guarantee :verified_via_api do |(user_id), api_response|
+    post_id = api_response["id"]
     API.post_exists?(user_id, post_id)
   end
 
