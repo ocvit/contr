@@ -20,7 +20,7 @@ Or install it manually:
 gem install contr
 ```
 
-## Terminology
+## Glossary
 
 Contract consists of rules of 2 types:
 
